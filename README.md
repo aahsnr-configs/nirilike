@@ -11,7 +11,7 @@ Clicking a strip switches to that workspace and animates it back to full-screen.
 - Active workspace highlighted with an accent border
 - Hovered workspace highlighted with a neutral border
 - Click or touch to select and switch
-- Single dispatcher: `nirilike:toggle`
+- Single dispatcher: `nirilike`
 
 ## Installation
 
@@ -52,7 +52,7 @@ hyprctl plugin load $(pwd)/build/libnirilike.so
 `hyprpm` installs headers by cloning the **upstream** `hyprwm/Hyprland` repo and
 checking out the commit hash reported by `hyprctl version`. If you run a custom
 fork whose commit hashes don't exist in upstream, `hyprpm update` will fail at
-the headers step with _"failed to check out to running ver"_.
+the headers step with *"failed to check out to running ver"*.
 
 **Workaround — install headers from your fork:**
 
@@ -88,7 +88,7 @@ plugin:nirilike:border_size = 3      # border thickness (logical px)
 ### Recommended keybind
 
 ```ini
-bind = SUPER, Tab, nirilike:toggle
+bind = SUPER, Tab, nirilike, toggle
 ```
 
 ### Optional: load on startup
@@ -99,11 +99,11 @@ exec-once = hyprpm reload
 
 ## Dispatcher reference
 
-| Dispatcher        | Argument | Effect                          |
-| ----------------- | -------- | ------------------------------- |
-| `nirilike:toggle` | _(none)_ | Open if closed, close if open   |
-| `nirilike:toggle` | `open`   | Open (no-op if already open)    |
-| `nirilike:toggle` | `close`  | Close (no-op if already closed) |
+| Dispatcher | Argument | Effect |
+|---|---|---|
+| `nirilike` | `toggle` | Open if closed, close if open |
+| `nirilike` | `open` | Open (no-op if already open) |
+| `nirilike` | `close` | Close (no-op if already closed) |
 
 ## Building from source (development)
 

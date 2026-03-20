@@ -20,6 +20,8 @@
 
 #include "globals.hpp"
 #include "overview.hpp"
+#include "globals.hpp"
+#include "overview.hpp"
 
 // ────────────────────────────────────────────────────────────────────────────
 //  Hook state
@@ -90,7 +92,7 @@ static void hkAddDamageB(void* thisptr, const pixman_region32_t* rg) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-//  Dispatcher:  nirilike:toggle  [open|close|toggle]
+//  Dispatcher:  nirilike  args: toggle (default) | open | close
 // ────────────────────────────────────────────────────────────────────────────
 
 static SDispatchResult onNiriDispatcher(std::string arg) {
@@ -100,7 +102,7 @@ static SDispatchResult onNiriDispatcher(std::string arg) {
         return {};
     }
 
-    if (arg == "open" || arg.empty()) {
+    if (arg == "open") {
         if (!g_pNiriOverview) {
             renderingOverview = true;
             g_pNiriOverview   = std::make_unique<COverview>(
@@ -110,7 +112,7 @@ static SDispatchResult onNiriDispatcher(std::string arg) {
         return {};
     }
 
-    // Default (and "toggle"):
+    // "toggle" or empty string (e.g. hyprctl dispatch nirilike) — both toggle.
     if (g_pNiriOverview) {
         g_pNiriOverview->close();
     } else {
@@ -194,7 +196,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         });
 
     // ── Register dispatcher ───────────────────────────────────────────────
-    HyprlandAPI::addDispatcherV2(PHANDLE, "nirilike:toggle", ::onNiriDispatcher);
+    HyprlandAPI::addDispatcherV2(PHANDLE, "nirilike", ::onNiriDispatcher);
 
     // ── Register config values ────────────────────────────────────────────
     // All values live under plugin:nirilike:* as required.
