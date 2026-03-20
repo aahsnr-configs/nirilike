@@ -151,41 +151,91 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     }
 
     // ── Hook renderWorkspace ─────────────────────────────────────────────
+    // findFunctionsByName is a SUBSTRING match: "renderWorkspace" also
+    // matches renderWorkspaceWindows and renderWorkspaceWindowsFullscreen.
+    // Those short helpers may lack enough bytes for the 14-byte x86_64
+    // trampoline, causing hook() to silently return false.
+    // Filter on the demangled name to get exactly CHyprRenderer::renderWorkspace.
     auto FNS = HyprlandAPI::findFunctionsByName(PHANDLE, "renderWorkspace");
     if (FNS.empty()) {
         failNotif("symbol not found: renderWorkspace");
         throw std::runtime_error("[nirilike] renderWorkspace not found");
     }
-    g_pRenderWorkspaceHook = HyprlandAPI::createFunctionHook(
-        PHANDLE, FNS[0].address, (void*)hkRenderWorkspace);
+    {
+        const SFunctionMatch* match = nullptr;
+        for (const auto& fn : FNS) {
+            // Accept the first entry whose demangled name is exactly
+            // CHyprRenderer::renderWorkspace (not the ...Windows variants).
+            if (fn.demangled.find("CHyprRenderer::renderWorkspace(") != std::string::npos) {
+                match = &fn;
+                break;
+            }
+        }
+        if (!match) {
+            std::string sigs;
+            for (const auto& fn : FNS)
+                sigs += "  " + fn.demangled + "\n";
+            failNotif("renderWorkspace: no matching overload found.\nCandidates:\n" + sigs);
+            throw std::runtime_error("[nirilike] renderWorkspace overload not found");
+        }
+        g_pRenderWorkspaceHook = HyprlandAPI::createFunctionHook(
+            PHANDLE, match->address, (void*)hkRenderWorkspace);
+    }
 
     // ── Hook addDamage(const pixman_region32_t*) ─────────────────────────
-    FNS = HyprlandAPI::findFunctionsByName(PHANDLE, "addDamageEPK15pixman_region32");
+    // Search by the demangled class + argument type so the overload
+    // resolution is stable across fork variants.
+    FNS = HyprlandAPI::findFunctionsByName(PHANDLE, "addDamage");
     if (FNS.empty()) {
-        failNotif("symbol not found: addDamageEPK15pixman_region32");
-        throw std::runtime_error("[nirilike] addDamage(pixman) not found");
+        failNotif("symbol not found: CMonitor::addDamage");
+        throw std::runtime_error("[nirilike] addDamage not found");
     }
-    g_pAddDamageHookB = HyprlandAPI::createFunctionHook(
-        PHANDLE, FNS[0].address, (void*)hkAddDamageB);
+    {
+        const SFunctionMatch* matchB = nullptr; // pixman overload
+        const SFunctionMatch* matchA = nullptr; // CBox overload
+        for (const auto& fn : FNS) {
+            const auto& d = fn.demangled;
+            if (d.find("CMonitor::addDamage") == std::string::npos)
+                continue;
+            if (d.find("pixman") != std::string::npos && !matchB)
+                matchB = &fn;
+            else if (d.find("CBox") != std::string::npos && !matchA)
+                matchA = &fn;
+        }
 
-    // ── Hook addDamage(const CBox&) ──────────────────────────────────────
-    FNS = HyprlandAPI::findFunctionsByName(PHANDLE,
-        "_ZN8CMonitor9addDamageERKN9Hyprutils4Math4CBoxE");
-    if (FNS.empty()) {
-        failNotif("symbol not found: addDamage(CBox)");
-        throw std::runtime_error("[nirilike] addDamage(CBox) not found");
+        if (!matchB) {
+            std::string sigs;
+            for (const auto& fn : FNS)
+                sigs += "  " + fn.demangled + "\n";
+            failNotif("addDamage(pixman): no matching overload.\nCandidates:\n" + sigs);
+            throw std::runtime_error("[nirilike] addDamage(pixman) not found");
+        }
+        if (!matchA) {
+            std::string sigs;
+            for (const auto& fn : FNS)
+                sigs += "  " + fn.demangled + "\n";
+            failNotif("addDamage(CBox): no matching overload.\nCandidates:\n" + sigs);
+            throw std::runtime_error("[nirilike] addDamage(CBox) not found");
+        }
+
+        g_pAddDamageHookB = HyprlandAPI::createFunctionHook(
+            PHANDLE, matchB->address, (void*)hkAddDamageB);
+        g_pAddDamageHookA = HyprlandAPI::createFunctionHook(
+            PHANDLE, matchA->address, (void*)hkAddDamageA);
     }
-    g_pAddDamageHookA = HyprlandAPI::createFunctionHook(
-        PHANDLE, FNS[0].address, (void*)hkAddDamageA);
 
-    // ── Activate all hooks ───────────────────────────────────────────────
-    bool ok = g_pRenderWorkspaceHook->hook();
-    ok      = ok && g_pAddDamageHookA->hook();
-    ok      = ok && g_pAddDamageHookB->hook();
-
-    if (!ok) {
-        failNotif("hook() failed");
-        throw std::runtime_error("[nirilike] hook() failed");
+    // ── Activate hooks — report each failure individually ─────────────────
+    if (!g_pRenderWorkspaceHook->hook()) {
+        failNotif("hook() failed: renderWorkspace — function may be too short for trampoline");
+        throw std::runtime_error("[nirilike] hook() failed: renderWorkspace");
+    }
+    if (!g_pAddDamageHookA->hook()) {
+        failNotif("hook() failed: addDamage(CBox) — function may be too short for trampoline");
+        throw std::runtime_error("[nirilike] hook() failed: addDamage(CBox)");
+    }
+    if (!g_pAddDamageHookB->hook()) {
+        failNotif("hook() failed: addDamage(pixman) — function may be too short for trampoline");
+        throw std::runtime_error("[nirilike] hook() failed: addDamage(pixman)");
     }
 
     // ── Pre-render callback — refresh dirty FBs before each frame ────────
