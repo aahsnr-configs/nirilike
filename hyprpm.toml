@@ -1,0 +1,7 @@
+name = "nirilike"
+description = "Niri-style vertical strip workspace overview for Hyprland"
+version = "1.0"
+author = "nirilike"
+
+[build]
+cmake = true
