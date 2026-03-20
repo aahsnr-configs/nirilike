@@ -1,7 +1,27 @@
-name = "nirilike"
-description = "Niri-style vertical strip workspace overview for Hyprland"
-version = "1.0"
-author = "nirilike"
+# ── Repository metadata (required) ──────────────────────────────────────────
+[repository]
+name    = "nirilike"
+authors = ["ahsan-rahman"]
 
-[build]
-cmake = true
+# ── commit_pins ──────────────────────────────────────────────────────────────
+# Maps a running Hyprland commit hash to a known-good plugin commit hash.
+#
+# Because this plugin is built against a CUSTOM Hyprland fork (not the
+# upstream hyprwm/Hyprland repo), the commit hashes produced by
+# `hyprctl version` will never match upstream hashes, so hyprpm's
+# pin-matching logic will find no match and will fall back to the plugin
+# repo's latest `main` branch — which is exactly what we want.
+#
+# Leave the array empty; add entries here only if you later need to lock
+# specific plugin releases to specific fork versions.
+commit_pins = []
+
+# ── Plugin definition ────────────────────────────────────────────────────────
+[nirilike]
+description = "Niri-style vertical strip workspace overview for Hyprland"
+authors     = ["ahsan-rahman"]
+output      = "build/libnirilike.so"
+build = [
+    "cmake -DCMAKE_BUILD_TYPE=Release -B build",
+    "cmake --build build -j $(nproc)"
+]
