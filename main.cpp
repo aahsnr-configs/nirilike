@@ -2,6 +2,13 @@
 
 #include <unistd.h>
 
+// pixman headers live at /usr/include/pixman-1/ on Arch Linux — the subdirectory
+// is not in the default compiler search path.  Using the full path here makes
+// the include work unconditionally without relying on -I/usr/include/pixman-1
+// being threaded through from pkg-config.  pixman_region32_t is used directly
+// in the addDamage hook typedef and implementation below.
+#include <pixman-1/pixman.h>
+
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
@@ -11,6 +18,8 @@
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
 
+#include "globals.hpp"
+#include "overview.hpp"
 #include "globals.hpp"
 #include "overview.hpp"
 

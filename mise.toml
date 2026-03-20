@@ -1,0 +1,266 @@
+# mise.toml — nirilike Hyprland plugin
+# Docs: https://mise.jdx.dev/tasks/
+#
+# Quick reference:
+#   mise tasks              List every available task with descriptions
+#   mise run build          Compile (Debug) — skips if already up to date
+#   mise run reload         The primary dev loop: unload → rebuild → reload
+#   mise run watch          Auto-rebuild whenever a source file changes
+#   mise run format         Auto-format all C++ sources with clang-format
+#   mise run status         Show whether the plugin is live in Hyprland
+#
+# Machine-local overrides (gitignored) live in .mise.local.toml.
+# Copy .mise.local.toml.example to .mise.local.toml and fill in HYPRLAND_SRC.
+
+min_version = "2024.9.5"
+
+# ── Environment ──────────────────────────────────────────────────────────────
+
+[env]
+# Absolute path to the debug .so — used by load / unload / reload tasks.
+# {{ config_root }} resolves to the directory containing this file.
+NIRILIKE_SO     = "{{ config_root }}/build/libnirilike.so"
+NIRILIKE_SO_REL = "build/libnirilike.so"
+
+# Path to your custom Hyprland fork source tree.
+# NOT set here — define it in .mise.local.toml (gitignored):
+#   [env]
+#   HYPRLAND_SRC = "/home/you/src/Hyprland"
+HYPRLAND_SRC = ""
+
+# ── Build ─────────────────────────────────────────────────────────────────────
+
+[tasks.configure]
+# Internal dependency of build — runs only when CMakeLists.txt changes.
+description = "CMake configure step (Debug + compile_commands.json)"
+hide        = true
+run         = "cmake -DCMAKE_BUILD_TYPE=Debug -B build"
+sources     = ["CMakeLists.txt"]
+outputs     = ["build/CMakeCache.txt"]
+
+[tasks."configure:release"]
+description = "CMake configure step (Release)"
+hide        = true
+run         = "cmake -DCMAKE_BUILD_TYPE=Release -B build-release"
+sources     = ["CMakeLists.txt"]
+outputs     = ["build-release/CMakeCache.txt"]
+
+[tasks.build]
+description = "Build the plugin (Debug) — skips rebuild if .so is up to date"
+alias       = "b"
+depends     = ["configure"]
+run         = [
+    "cmake --build build -j $(nproc)",
+    # Symlink compile_commands.json to the project root so clangd finds it.
+    "ln -sf build/compile_commands.json compile_commands.json",
+]
+# mise skips the run commands when outputs are newer than all sources.
+sources  = ["*.cpp", "*.hpp", "CMakeLists.txt"]
+outputs  = ["build/libnirilike.so"]
+
+[tasks."build:release"]
+description = "Build the plugin (Release)"
+alias       = "br"
+depends     = ["configure:release"]
+run         = "cmake --build build-release -j $(nproc)"
+sources     = ["*.cpp", "*.hpp", "CMakeLists.txt"]
+outputs     = ["build-release/libnirilike.so"]
+
+# ── Test / load ──────────────────────────────────────────────────────────────
+
+[tasks.load]
+description = "Load the debug plugin into the running Hyprland session"
+depends     = ["build"]
+run         = "hyprctl plugin load \"$NIRILIKE_SO\""
+
+[tasks.unload]
+description = "Unload the plugin from Hyprland (no-op if not loaded)"
+run         = "hyprctl plugin unload \"$NIRILIKE_SO\" 2>/dev/null || true"
+
+[tasks.reload]
+# Primary development loop.  Does NOT use mise's sources/outputs caching so
+# the rebuild always runs — you want fresh code after every edit.
+description = "Unload → rebuild (Debug) → reload  [main dev loop]"
+alias       = "r"
+run         = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+SO="$NIRILIKE_SO"
+
+echo "── unloading current plugin (if any) ──────────────────────────────"
+hyprctl plugin unload "$SO" 2>/dev/null || true
+
+echo "── building ────────────────────────────────────────────────────────"
+cmake -DCMAKE_BUILD_TYPE=Debug -B build
+cmake --build build -j "$(nproc)"
+ln -sf build/compile_commands.json compile_commands.json
+
+echo "── loading new build ───────────────────────────────────────────────"
+hyprctl plugin load "$SO"
+
+echo "✓  nirilike reloaded from $SO"
+'''
+
+[tasks.watch]
+description = "Auto-rebuild (Debug) whenever a source file changes"
+run         = "mise watch -t build"
+
+# ── Status / inspection ──────────────────────────────────────────────────────
+
+[tasks.status]
+description = "Show whether nirilike is loaded and print Hyprland plugin info"
+run         = '''
+#!/usr/bin/env bash
+if hyprctl plugin list 2>/dev/null | grep -qi "nirilike"; then
+    echo "✓  nirilike is loaded"
+    hyprctl plugin list | grep -i nirilike
+else
+    echo "✗  nirilike is NOT loaded"
+fi
+echo ""
+echo "Running Hyprland version:"
+hyprctl version
+'''
+
+# ── Clean ────────────────────────────────────────────────────────────────────
+
+[tasks.clean]
+description = "Remove the debug build directory"
+alias       = "c"
+run         = "rm -rf build"
+
+[tasks."clean:all"]
+description = "Remove all build directories (debug + release)"
+run         = "rm -rf build build-release"
+
+# ── Code quality ─────────────────────────────────────────────────────────────
+
+[tasks.format]
+description = "Format all C++ sources in-place with clang-format"
+run         = '''
+#!/usr/bin/env bash
+set -euo pipefail
+if ! command -v clang-format &>/dev/null; then
+    echo "Error: clang-format not found.  Install it with your package manager." >&2
+    exit 1
+fi
+# Format every .cpp and .hpp at the project root; skip the build trees.
+mapfile -t FILES < <(find . -maxdepth 1 -name "*.cpp" -o -name "*.hpp")
+if [ ${#FILES[@]} -eq 0 ]; then
+    echo "No source files found."
+    exit 0
+fi
+clang-format -i "${FILES[@]}"
+echo "✓  formatted ${#FILES[@]} file(s)"
+'''
+
+[tasks."format:check"]
+description = "Check formatting without modifying files (non-zero exit if any file differs)"
+run         = '''
+#!/usr/bin/env bash
+set -euo pipefail
+if ! command -v clang-format &>/dev/null; then
+    echo "Error: clang-format not found." >&2
+    exit 1
+fi
+mapfile -t FILES < <(find . -maxdepth 1 -name "*.cpp" -o -name "*.hpp")
+BAD=()
+for f in "${FILES[@]}"; do
+    if ! clang-format --dry-run --Werror "$f" 2>/dev/null; then
+        BAD+=("$f")
+    fi
+done
+if [ ${#BAD[@]} -gt 0 ]; then
+    echo "The following files are not formatted:"
+    printf "  %s\n" "${BAD[@]}"
+    echo "Run: mise run format"
+    exit 1
+fi
+echo "✓  all files are correctly formatted"
+'''
+
+# ── Maintenance ──────────────────────────────────────────────────────────────
+
+[tasks.headers]
+description = "Install Hyprland headers from your custom fork (requires HYPRLAND_SRC in .mise.local.toml)"
+run         = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ -z "${HYPRLAND_SRC:-}" ]; then
+    cat >&2 << 'MSG'
+Error: HYPRLAND_SRC is not set.
+
+Add this to .mise.local.toml (gitignored):
+  [env]
+  HYPRLAND_SRC = "/path/to/your/hyprland/fork"
+
+See .mise.local.toml.example for a template.
+MSG
+    exit 1
+fi
+
+if [ ! -d "$HYPRLAND_SRC" ]; then
+    echo "Error: HYPRLAND_SRC directory does not exist: $HYPRLAND_SRC" >&2
+    exit 1
+fi
+
+echo "── source: $HYPRLAND_SRC ─────────────────────────────────────────────"
+cd "$HYPRLAND_SRC"
+
+echo "── configuring Hyprland (Release) ──────────────────────────────────"
+cmake --no-warn-unused-cli -DCMAKE_BUILD_TYPE=Release -S . -B build
+
+echo "── building Hyprland ───────────────────────────────────────────────"
+cmake --build build -j "$(nproc)"
+
+echo "── installing headers ──────────────────────────────────────────────"
+# Try the CMake component install first (current method); fall back to the
+# legacy Makefile target for older fork checkouts.
+if sudo cmake --install build --component headers 2>/dev/null; then
+    echo "✓  headers installed via cmake --install"
+elif sudo make -C build installheaders 2>/dev/null; then
+    echo "✓  headers installed via make installheaders"
+else
+    echo "Error: could not install headers — check your fork's install targets." >&2
+    exit 1
+fi
+
+echo "✓  Hyprland headers installed.  You can now run: mise run build"
+'''
+
+[tasks."hyprpm:reinstall"]
+description = "Remove and re-add the plugin via hyprpm (use after publishing a new commit)"
+confirm     = "This will remove and re-add nirilike via hyprpm.  Continue?"
+run         = '''
+#!/usr/bin/env bash
+set -euo pipefail
+REPO="$(git remote get-url origin 2>/dev/null || true)"
+if [ -z "$REPO" ]; then
+    echo "Error: could not determine remote origin URL.  Set it with:" >&2
+    echo "  git remote add origin https://github.com/YOUR_USERNAME/nirilike" >&2
+    exit 1
+fi
+echo "── removing existing hyprpm entry ───────────────────────────────────"
+hyprpm remove nirilike 2>/dev/null || true
+echo "── adding from $REPO ──────────────────────────────────────────────"
+hyprpm add "$REPO"
+hyprpm enable nirilike
+echo "✓  nirilike re-installed via hyprpm"
+'''
+
+[tasks."git:tag"]
+description = "Create and push an annotated git tag for a new release (usage: mise run git:tag -- v1.2)"
+run         = '''
+#!/usr/bin/env bash
+set -euo pipefail
+TAG="${1:-}"
+if [ -z "$TAG" ]; then
+    echo "Usage: mise run git:tag -- <tag>   e.g.  mise run git:tag -- v1.1" >&2
+    exit 1
+fi
+git tag -a "$TAG" -m "Release $TAG"
+git push origin "$TAG"
+echo "✓  tagged and pushed $TAG"
+'''

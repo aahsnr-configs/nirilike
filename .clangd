@@ -1,0 +1,28 @@
+# .clangd — nirilike project
+#
+# This file is read directly by clangd before compile_commands.json is
+# generated.  It provides the fallback -I flag for pixman so that clangd
+# does not emit "pixman-version.h file not found" diagnostics when the
+# project has not been built yet.
+#
+# Once `mise run build` has been run, build/compile_commands.json (symlinked
+# to the project root) takes precedence and supplies the full set of flags
+# from pkg-config, making this file redundant — but it remains harmless.
+#
+# The Diagnostics section suppresses the one non-fatal warning that clang
+# itself emits when it processes pixman.h through an angled-include path:
+#   pp_file_not_found_angled_include_not_fatal
+
+CompileFlags:
+  Add:
+    # pixman headers live in a subdirectory on Arch Linux; the base
+    # /usr/include/ is always in the compiler's search path, but
+    # /usr/include/pixman-1/ is not unless explicitly added.
+    - -I/usr/include/pixman-1
+
+Diagnostics:
+  Suppress:
+    # clang emits this as a non-fatal warning when a header included with
+    # <angled> syntax is found only via a fallback search path.  Once
+    # compile_commands.json is present this warning disappears naturally.
+    - pp_file_not_found_angled_include_not_fatal

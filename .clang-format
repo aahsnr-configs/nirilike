@@ -1,0 +1,59 @@
+# .clang-format — nirilike plugin
+#
+# Matches the code style used by Hyprland and its official plugins:
+#   - 4-space indentation
+#   - 120-character column limit
+#   - Pointer/reference declarators aligned to the left (int* p, not int *p)
+#   - Braces on the same line (Attach style), except for namespace blocks
+#   - Always-attached braces for control flow
+#   - One statement per line
+#
+# Run:  mise run format          (format in place)
+#       mise run format:check    (check only, non-zero exit if any file differs)
+
+BasedOnStyle:                   LLVM
+IndentWidth:                     4
+TabWidth:                        4
+UseTab:                          Never
+ColumnLimit:                    120
+
+# Pointers and references
+PointerAlignment:               Left
+ReferenceAlignment:             Left
+
+# Braces
+BreakBeforeBraces:              Attach
+BraceWrapping:
+  AfterNamespace:               false
+
+# Alignment
+AlignAfterOpenBracket:          Align
+AlignConsecutiveAssignments:    Consecutive
+AlignConsecutiveDeclarations:   None
+AlignTrailingComments:
+  Kind:                         Always
+  OverEmptyLines:               1
+
+# Includes
+SortIncludes:                   CaseSensitive
+IncludeBlocks:                  Preserve
+
+# Spacing
+SpaceBeforeParens:              ControlStatements
+SpaceInEmptyParentheses:        false
+SpacesInAngles:                 Never
+SpaceAfterTemplateKeyword:      false
+
+# Line breaks
+AllowShortFunctionsOnASingleLine:  Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLambdasOnASingleLine:  All
+BreakConstructorInitializers:   BeforeComma
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth:        4
+
+# Template and lambda
+AlwaysBreakTemplateDeclarations: Yes
+
+# C++23
+Standard:                       c++23
