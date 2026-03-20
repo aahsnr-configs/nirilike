@@ -1,4 +1,5 @@
 #include "overview.hpp"
+#include "globals.hpp"  // PHANDLE — used in HyprlandAPI::getConfigValue calls
 
 // ── #define private public lets us call CHyprRenderer::renderWorkspace()
 //    (declared private) and use CHyprOpenGLImpl internals.

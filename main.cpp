@@ -20,8 +20,6 @@
 
 #include "globals.hpp"
 #include "overview.hpp"
-#include "globals.hpp"
-#include "overview.hpp"
 
 // ────────────────────────────────────────────────────────────────────────────
 //  Hook state
